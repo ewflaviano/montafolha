@@ -3,11 +3,11 @@ import { layout, imageCrop, PAPERS } from './geometry.js';
 import './style.css';
 
 const app = document.querySelector('#app');
-const saved = (() => { try { return JSON.parse(localStorage.getItem('mosaico-config') || '{}'); } catch { return {}; } })();
+const saved = (() => { try { return JSON.parse(localStorage.getItem('montafolha-config') || localStorage.getItem('mosaico-config') || '{}'); } catch { return {}; } })();
 const state = { config: { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5, customW: 210, customH: 297, guide: true, ...saved }, image: null, name: '', selected: 0, busy: false };
 
 app.innerHTML = `
-  <header class="topbar"><div class="brand"><span class="brand-mark">▦</span><span>Mosaico</span></div><span class="top-note">Pôster em folhas · local e privado</span><span class="local-pill">● Sem envio de imagens</span></header>
+  <header class="topbar"><div class="brand"><span class="brand-mark">▦</span><span>MontaFolha</span></div><span class="top-note">Pôster em folhas · local e privado</span><span class="local-pill">● Sem envio de imagens</span></header>
   <main class="workspace">
     <aside class="controls">
       <div class="aside-heading"><span class="eyebrow">PROJETO</span><h1>Monte seu pôster</h1><p>Escolha a imagem, o papel e como as folhas se encontram.</p></div>
@@ -204,7 +204,7 @@ async function downloadPdf() {
     }
     if (state.config.guide) await addAssemblyGuide(pdf, l);
     const bytes = await pdf.save(); const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-    const a = document.createElement('a'); a.href = url; a.download = `mosaico-${l.cols}x${l.rows}-${state.config.paper.toLowerCase()}.pdf`; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `montafolha-${l.cols}x${l.rows}-${state.config.paper.toLowerCase()}.pdf`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     setStatus(`PDF gerado: ${l.pages.length} folhas${state.config.guide ? ' + guia' : ''}.`);
   } catch (e) { console.error(e); setStatus(`Falha ao gerar PDF: ${e.message}`, true); }
@@ -214,9 +214,9 @@ async function downloadPdf() {
 app.addEventListener('change', e => {
   if (e.target.dataset.key) {
     const key = e.target.dataset.key; state.config[key] = e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'number' ? Number(e.target.value) : e.target.value;
-    localStorage.setItem('mosaico-config', JSON.stringify(state.config)); render();
+    localStorage.setItem('montafolha-config', JSON.stringify(state.config)); render();
   }
-  if (e.target.name === 'mode') { state.config.mode = e.target.value; localStorage.setItem('mosaico-config', JSON.stringify(state.config)); render(); }
+  if (e.target.name === 'mode') { state.config.mode = e.target.value; localStorage.setItem('montafolha-config', JSON.stringify(state.config)); render(); }
 });
 $('#file').addEventListener('change', e => loadFile(e.target.files[0]));
 $('#try-example').addEventListener('click', () => {

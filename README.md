@@ -1,6 +1,10 @@
-# Mosaico — MVP local
+# MontaFolha
 
-Aplicativo para dividir uma imagem em folhas de pôster. Processa a imagem no navegador, sem conta ou envio para servidor.
+Aplicativo gratuito e de código aberto para dividir uma imagem em folhas de pôster. Processa a imagem no navegador, sem conta ou envio para servidor.
+
+## Privacidade e funcionamento
+
+O navegador lê a imagem, monta as folhas com Canvas e gera o PDF com `pdf-lib`. O arquivo escolhido e o PDF não são enviados ao servidor. O site recebe apenas as requisições normais para carregar seus próprios arquivos; as configurações ficam no armazenamento local do navegador. A geração usa recursos do seu dispositivo, então imagens e grades grandes podem exigir mais memória.
 
 ## Executar
 
@@ -10,6 +14,14 @@ npm run dev
 ```
 
 Abra o endereço local mostrado pelo Vite. Para compilar: `npm run build`. Para verificar a geometria: `npm test`.
+
+O resultado de `npm run build` fica em `dist/` e pode ser servido como site estático. Nenhum backend é necessário para as funções deste MVP.
+
+## Deploy
+
+O workflow em `.github/workflows/deploy.yml` executa os testes e a compilação em pull requests e em alterações na branch `main`. Após uma compilação bem-sucedida em `main`, o GitHub Actions assume uma função IAM via OIDC, envia `dist/` para um bucket S3 privado e invalida o cache do CloudFront. O HTML e a imagem de exemplo recebem cache curto; os arquivos com hash gerados pelo Vite recebem cache longo. Nenhuma chave AWS fica armazenada no GitHub.
+
+O site é distribuído em `https://montafolha.com.br` e `https://www.montafolha.com.br`. A zona Route 53 contém registros A e AAAA de alias para o CloudFront. O certificado ACM cobre os dois nomes. A infraestrutura foi criada na conta AWS do profile CLI `vortex`; as variáveis de repositório `AWS_ROLE_ARN`, `AWS_REGION`, `S3_BUCKET` e `CLOUDFRONT_DISTRIBUTION_ID` indicam os recursos usados pelo workflow.
 
 ## Incluído
 
