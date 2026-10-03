@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layout, imageCrop } from './geometry.js';
+import { layout, imageCrop, imagePlacement, pageImageRegion } from './geometry.js';
 const base = { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5 };
 for (const [mode, expectedW, expectedH] of [['zero', 594, 420], ['flap', 584, 410], ['fold', 574, 400]]) {
   test(`${mode}: as folhas cobrem o pôster sem lacunas`, () => {
@@ -43,4 +43,55 @@ test('proporções iguais mantêm a imagem inteira e posições inválidas ficam
   assert.deepEqual(imageCrop(1600, 900, 800, 900, -10), { x: 0, y: 0, w: 800, h: 900 });
   assert.deepEqual(imageCrop(1600, 900, 800, 900, 10), { x: 800, y: 0, w: 800, h: 900 });
   assert.deepEqual(imageCrop(1600, 900, 800, 900, NaN), imageCrop(1600, 900, 800, 900));
+});
+
+test('imagem quadrada cabe inteira no pôster com branco nas laterais', () => {
+  const placement = imagePlacement(1000, 1000, 600, 400);
+  assert.deepEqual(placement, {
+    fit: 'contain',
+    source: { x: 0, y: 0, w: 1000, h: 1000 },
+    poster: { x: 100, y: 0, w: 400, h: 400 },
+  });
+  const l = layout({ ...base, paper: 'Personalizado', customW: 200, customH: 300, mode: 'zero' });
+  assert.deepEqual(pageImageRegion(placement, l.pages[0]), {
+    source: { x: 0, y: 0, w: 500, h: 500 },
+    paper: { x: 100, y: 0, w: 200, h: 200 },
+  });
+  assert.deepEqual(pageImageRegion(placement, l.pages[1]), {
+    source: { x: 500, y: 0, w: 500, h: 500 },
+    paper: { x: 0, y: 0, w: 200, h: 200 },
+  });
+});
+
+test('folhas fora da imagem permanecem inteiramente brancas', () => {
+  const l = layout({ ...base, paper: 'Personalizado', customW: 200, customH: 300, cols: 3, rows: 1, mode: 'zero' });
+  const placement = imagePlacement(1000, 1000, l.posterW, l.posterH);
+  assert.equal(pageImageRegion(placement, l.pages[0]), null);
+  assert.deepEqual(pageImageRegion(placement, l.pages[1]).paper, { x: 50, y: 0, w: 200, h: 200 });
+  assert.equal(pageImageRegion(placement, l.pages[2]), null);
+});
+
+test('área impressa respeita margens de dobra e aba', () => {
+  for (const mode of ['fold', 'flap']) {
+    const l = layout({ ...base, paper: 'Personalizado', customW: 200, customH: 300, mode });
+    const placement = imagePlacement(1000, 1000, l.posterW, l.posterH);
+    for (const page of l.pages) {
+      const region = pageImageRegion(placement, page);
+      assert.ok(region.paper.x >= page.art.x);
+      assert.ok(region.paper.y >= page.art.y);
+      assert.ok(region.paper.x + region.paper.w <= page.art.x + page.art.w);
+      assert.ok(region.paper.y + region.paper.h <= page.art.y + page.art.h);
+    }
+  }
+});
+
+test('preencher mantém o recorte deslocável e ocupa todo o pôster', () => {
+  const placement = imagePlacement(1600, 900, 800, 900, 'cover', 1);
+  assert.deepEqual(placement.source, { x: 800, y: 0, w: 800, h: 900 });
+  assert.deepEqual(placement.poster, { x: 0, y: 0, w: 800, h: 900 });
+  assert.deepEqual(pageImageRegion(placement, { source: { x: 0, y: 0, w: 400, h: 450 }, art: { x: 5, y: 5 } }), {
+    source: { x: 800, y: 0, w: 400, h: 450 },
+    paper: { x: 5, y: 5, w: 400, h: 450 },
+  });
+  assert.throws(() => imagePlacement(1000, 1000, 600, 400, 'invalid'), /inválido/);
 });
