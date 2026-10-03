@@ -46,3 +46,45 @@ export function imageCrop(imgW, imgH, posterW, posterH, position = 0.5) {
   const h = imgW / dstRatio;
   return { x: 0, y: (imgH - h) * offset, w: imgW, h };
 }
+
+export function imagePlacement(imgW, imgH, posterW, posterH, fit = 'contain', position = 0.5) {
+  if (fit === 'cover') {
+    return {
+      fit,
+      source: imageCrop(imgW, imgH, posterW, posterH, position),
+      poster: { x: 0, y: 0, w: posterW, h: posterH },
+    };
+  }
+  if (fit !== 'contain') throw new Error('Ajuste da imagem inválido.');
+  const scale = Math.min(posterW / imgW, posterH / imgH);
+  const w = imgW * scale;
+  const h = imgH * scale;
+  return {
+    fit,
+    source: { x: 0, y: 0, w: imgW, h: imgH },
+    poster: { x: (posterW - w) / 2, y: (posterH - h) / 2, w, h },
+  };
+}
+
+export function pageImageRegion(placement, page) {
+  const { poster, source } = placement;
+  const left = Math.max(poster.x, page.source.x);
+  const top = Math.max(poster.y, page.source.y);
+  const right = Math.min(poster.x + poster.w, page.source.x + page.source.w);
+  const bottom = Math.min(poster.y + poster.h, page.source.y + page.source.h);
+  if (right <= left || bottom <= top) return null;
+  return {
+    source: {
+      x: source.x + (left - poster.x) * source.w / poster.w,
+      y: source.y + (top - poster.y) * source.h / poster.h,
+      w: (right - left) * source.w / poster.w,
+      h: (bottom - top) * source.h / poster.h,
+    },
+    paper: {
+      x: page.art.x + left - page.source.x,
+      y: page.art.y + top - page.source.y,
+      w: right - left,
+      h: bottom - top,
+    },
+  };
+}

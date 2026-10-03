@@ -32,8 +32,8 @@ O site é distribuído em `https://montafolha.com.br` e `https://www.montafolha.
 - Upload ou arraste de PNG, JPEG e WebP; imagem de exemplo para testar.
 - Grade de até 6 × 6 folhas, formatos A5/A4/A3/A2/Carta/Legal e papel personalizado.
 - Prévia montada e por folha, tamanho final e DPI efetivo.
-- Enquadramento ajustável no eixo recortado, com prévia antes de gerar o PDF.
-- PDF A4 e outros formatos com a arte até as bordas digitais.
+- Imagem inteira por padrão, com áreas brancas quando necessário; opção de preencher o pôster com recorte ajustável.
+- PDF A4 e outros formatos; no modo de preenchimento, a arte alcança as bordas digitais.
 - Aba única de cola à esquerda e acima das novas folhas, para impressora sem bordas.
 - Margens físicas independentes para modo de dobra sem corte, com linhas de dobra e guia opcional.
 - Guia de montagem visual em página A4, com miniaturas sobre a imagem completa, numeração e coordenadas de cada folha.
