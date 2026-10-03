@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Consent based fixed code diagnostics for MontaFolha
+Resources:
+  DiagnosticsLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/montafolha-diagnostics
+      RetentionInDays: 30
+  DiagnosticsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: montafolha-diagnostics
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: logs-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt DiagnosticsLogs.Arn
+  DiagnosticsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: montafolha-diagnostics
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt DiagnosticsRole.Arn
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 3
+      Code:
+        ZipFile: |
+          exports.handler = async () => ({statusCode: 503, body: ''});
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: WARN
+        LogGroup: !Ref DiagnosticsLogs
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: montafolha-diagnostics
+      ProtocolType: HTTP
+  Integration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt DiagnosticsFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 4000
+  Route:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'POST /api/diagnostics/errors'
+      Target: !Sub 'integrations/${Integration}'
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    DependsOn: Route
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+      RouteSettings:
+        'POST /api/diagnostics/errors':
+          ThrottlingBurstLimit: 2
+          ThrottlingRateLimit: 1
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DiagnosticsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/POST/api/diagnostics/errors'
+Outputs:
+  ApiDomain:
+    Value: !Sub '${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+  FunctionName:
+    Value: !Ref DiagnosticsFunction
