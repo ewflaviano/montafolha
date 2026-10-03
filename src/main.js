@@ -1,5 +1,6 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import { layout, imageCrop, PAPERS } from './geometry.js';
+import { getChoice, setChoice, pageView, reportError } from './usage.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -7,7 +8,7 @@ const saved = (() => { try { return JSON.parse(localStorage.getItem('montafolha-
 const state = { config: { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5, customW: 210, customH: 297, guide: true, ...saved }, image: null, name: '', selected: 0, busy: false };
 
 app.innerHTML = `
-  <header class="topbar"><div class="brand"><span class="brand-mark">▦</span><span>MontaFolha</span></div><span class="top-note">Pôster em folhas · local e privado</span><span class="local-pill">● Sem envio de imagens</span></header>
+  <header class="topbar"><a class="brand" href="#/"><span class="brand-mark">▦</span><span>MontaFolha</span></a><nav class="top-links" aria-label="Navegação"><a href="#/">Criar pôster</a><a href="#/apoiar">Apoiar</a><a href="#/privacidade">Privacidade</a></nav><span class="local-pill">● Sem envio de imagens</span></header>
   <main class="workspace">
     <aside class="controls">
       <div class="aside-heading"><span class="eyebrow">PROJETO</span><h1>Monte seu pôster</h1><p>Escolha a imagem, o papel e como as folhas se encontram.</p></div>
@@ -18,7 +19,9 @@ app.innerHTML = `
     </aside>
     <section class="preview-panel"><div class="preview-head"><div><span class="eyebrow">PRÉ-VISUALIZAÇÃO</span><h2 id="preview-title">Seu pôster</h2></div><div class="view-tabs"><button id="tab-mosaic" class="active" type="button">Montado</button><button id="tab-sheets" type="button">Folhas</button></div></div><div id="preview-content" class="preview-content"><div class="empty"><div class="empty-icon">▦</div><h3>Comece com uma imagem</h3><p>Depois de escolher o arquivo, você verá o pôster montado e cada folha antes de gerar o PDF.</p></div></div><div id="sheet-nav" class="sheet-nav hidden"><button id="prev-sheet" type="button">← Anterior</button><span id="sheet-counter"></span><button id="next-sheet" type="button">Próxima →</button></div></section>
     <aside class="summary"><span class="eyebrow">RESUMO</span><h2>Pronto para imprimir</h2><div class="summary-card"><div><span>Divisão</span><strong id="summary-grid">2 × 2 folhas</strong></div><div><span>Papel</span><strong id="summary-paper">A4 · Paisagem</strong></div><div><span>Pôster montado</span><strong id="summary-size">—</strong></div><div><span>Qualidade da imagem</span><strong id="summary-dpi">—</strong></div></div><div id="physical-note" class="physical-note"></div><button id="download" class="primary" type="button" disabled>↓ Gerar PDF</button><p id="status" class="status" role="status"></p><div class="mini-note">Imprima em <strong>tamanho real (100%)</strong>. Desative “ajustar à página” no diálogo de impressão.</div></aside>
-  </main>`;
+  </main>
+  <section id="info-page" class="info-page hidden"></section>
+  <div id="consent-banner" class="consent-banner hidden" role="region" aria-label="Permissão para análise de uso"><div><strong>Ajude a melhorar o MontaFolha</strong><p>Com sua permissão, contamos visitas com Google Analytics e enviamos códigos técnicos de erro. Imagens, PDFs, nomes de arquivos e detalhes dos erros não são enviados. Você pode mudar a escolha depois.</p><a href="#/privacidade">Entenda a privacidade</a></div><div class="consent-actions"><button id="consent-reject" type="button">Recusar</button><button id="consent-accept" type="button">Permitir</button></div></div>`;
 
 const $ = s => app.querySelector(s);
 const fmt = n => `${Math.round(n * 10) / 10}`.replace('.', ',');
@@ -26,6 +29,27 @@ let view = 'mosaic';
 let currentLayout;
 
 function setStatus(message, error = false) { $('#status').textContent = message; $('#status').classList.toggle('error', error); }
+function saveConfig() { try { localStorage.setItem('montafolha-config', JSON.stringify(state.config)); } catch { reportError('storage_unavailable'); setStatus('Não foi possível guardar as configurações neste navegador.', true); } }
+const pixCode = '00020126580014BR.GOV.BCB.PIX013662897130-e6bf-43c8-aa1c-33551be2e6835204000053039865802BR5925INOVAPROG DESENVOLVIMENTO6009SAO PAULO61080540900062250521P61bUEbLp00zJ84dx4hgd6304E808';
+function renderInfoPage() {
+  const route = location.hash === '#/apoiar' ? 'apoiar' : location.hash === '#/privacidade' ? 'privacidade' : 'home';
+  $('.workspace').classList.toggle('hidden', route !== 'home');
+  $('#info-page').classList.toggle('hidden', route === 'home');
+  if (route === 'apoiar') {
+    $('#info-page').innerHTML = `<a class="back-link" href="#/">← Voltar ao pôster</a><span class="eyebrow">APOIO AO PROJETO</span><h1>Ajude a manter o MontaFolha gratuito</h1><p>O MontaFolha é gratuito e de código aberto. Uma contribuição opcional ajuda a pagar a hospedagem e manter o projeto.</p><div class="support-grid"><div class="panel"><h2>Apoiar com Pix</h2><p>Copie o código abaixo no aplicativo do seu banco ou leia o QR Code. Escolha o valor no banco e confira o recebedor antes de confirmar.</p><label for="pix-code">Pix copia e cola</label><textarea id="pix-code" readonly>${pixCode}</textarea><button id="copy-pix" class="primary" type="button">Copiar código Pix</button><p id="pix-status" role="status"></p><p><strong>Recebedor:</strong> Inovaprog Desenvolvimento<br><strong>CNPJ:</strong> 64.420.635/0001-20</p><p>Chave Pix: <code>62897130-e6bf-43c8-aa1c-33551be2e683</code></p></div><div class="panel qr-panel"><img src="/pix-montafolha.svg" alt="QR Code Pix para apoiar o MontaFolha"/><p>O pagamento acontece apenas no seu banco. O MontaFolha não vê nem processa a contribuição.</p></div></div><p>Também pode ajudar com ideias e código no <a href="https://github.com/ewflaviano/montafolha">repositório do projeto</a>.</p>`;
+    $('#copy-pix').addEventListener('click', async () => { try { await navigator.clipboard.writeText(pixCode); $('#pix-status').textContent = 'Código copiado. Cole no aplicativo do seu banco.'; } catch { $('#pix-status').textContent = 'Não foi possível copiar automaticamente. Selecione o código acima para copiar.'; $('#pix-code').focus(); $('#pix-code').select(); } });
+  } else if (route === 'privacidade') {
+    $('#info-page').innerHTML = `<a class="back-link" href="#/">← Voltar ao pôster</a><span class="eyebrow">PRIVACIDADE</span><h1>Seus arquivos ficam no navegador</h1><p>A imagem escolhida e o PDF são processados no seu dispositivo. O MontaFolha não os envia para a AWS nem para o Google. As configurações e a permissão de uso ficam no armazenamento local deste navegador.</p><h2>Google Analytics e diagnóstico</h2><p>Se você permitir, o navegador carrega o Google Analytics para contar visitas às páginas do MontaFolha. O mesmo aceite permite enviar à nossa API somente uma categoria e um código fixo de erro, com limite de envios. Não enviamos nome de arquivo, imagem, PDF, mensagem, stack, URL ou identificador do erro. A API grava contagens técnicas no CloudWatch por 30 dias. A infraestrutura de rede recebe os dados necessários para entregar a solicitação, como o IP.</p><p>Antes de aceitar ou após recusar, o script do Analytics não é carregado e o navegador não envia diagnósticos. Revogar interrompe novas medições e remove os cookies do Analytics acessíveis a este site. Dados já agregados no Google ou na AWS não podem ser retirados individualmente.</p><div class="panel"><h2>Sua escolha</h2><p id="consent-state"></p><div class="privacy-actions"><button id="privacy-accept" type="button">Permitir análise e diagnóstico</button><button id="privacy-reject" type="button">Recusar ou revogar</button></div><p id="privacy-status" role="status"></p></div><p>O app continua disponível independentemente dessa escolha. Para colaborar, veja o <a href="https://github.com/ewflaviano/montafolha/blob/main/CONTRIBUTING.md">guia de contribuição</a>.</p>`;
+    updateConsentState();
+    $('#privacy-accept').addEventListener('click', () => chooseConsent('accepted'));
+    $('#privacy-reject').addEventListener('click', () => chooseConsent('rejected'));
+  }
+  pageView();
+  window.scrollTo(0, 0);
+}
+function updateConsentState() { const el = $('#consent-state'); if (el) el.textContent = getChoice() === 'accepted' ? 'Você permitiu análise e diagnóstico.' : getChoice() === 'rejected' ? 'Você recusou análise e diagnóstico.' : 'Você ainda não escolheu.'; }
+function updateConsentBanner() { $('#consent-banner').classList.toggle('hidden', getChoice() !== null); updateConsentState(); }
+function chooseConsent(value) { if (!setChoice(value)) { const el = $('#privacy-status'); if (el) el.textContent = 'Não foi possível salvar sua escolha. A análise permanece desativada.'; return; } updateConsentBanner(); const el = $('#privacy-status'); if (el) el.textContent = value === 'accepted' ? 'Permissão salva.' : 'Permissão recusada. Novas medições foram interrompidas.'; }
 function syncControls() {
   app.querySelectorAll('[data-key]').forEach(el => { const v = state.config[el.dataset.key]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
   app.querySelector(`input[name="mode"][value="${state.config.mode}"]`).checked = true;
@@ -96,7 +120,7 @@ async function loadFile(file) {
   const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => { state.image = img; state.name = file.name; $('#file-name').textContent = file.name; $('#image-meta').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`; render(); };
-  img.onerror = () => { URL.revokeObjectURL(url); setStatus('Não foi possível ler a imagem.', true); };
+  img.onerror = () => { URL.revokeObjectURL(url); reportError('image_decode_failed'); setStatus('Não foi possível ler a imagem.', true); };
   img.src = url;
 }
 
@@ -207,21 +231,22 @@ async function downloadPdf() {
     const a = document.createElement('a'); a.href = url; a.download = `montafolha-${l.cols}x${l.rows}-${state.config.paper.toLowerCase()}.pdf`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     setStatus(`PDF gerado: ${l.pages.length} folhas${state.config.guide ? ' + guia' : ''}.`);
-  } catch (e) { console.error(e); setStatus(`Falha ao gerar PDF: ${e.message}`, true); }
+  } catch (e) { console.error(e); reportError('pdf_generation_failed'); setStatus('Falha ao gerar PDF. Tente uma imagem menor ou outra configuração.', true); }
   finally { state.busy = false; $('#download').textContent = '↓ Gerar PDF'; $('#download').disabled = false; }
 }
 
 app.addEventListener('change', e => {
   if (e.target.dataset.key) {
     const key = e.target.dataset.key; state.config[key] = e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'number' ? Number(e.target.value) : e.target.value;
-    localStorage.setItem('montafolha-config', JSON.stringify(state.config)); render();
+    saveConfig(); render();
   }
-  if (e.target.name === 'mode') { state.config.mode = e.target.value; localStorage.setItem('montafolha-config', JSON.stringify(state.config)); render(); }
+  if (e.target.name === 'mode') { state.config.mode = e.target.value; saveConfig(); render(); }
 });
 $('#file').addEventListener('change', e => loadFile(e.target.files[0]));
 $('#try-example').addEventListener('click', () => {
   const img = new Image();
   img.onload = () => { state.image = img; state.name = 'exemplo-grade.png'; $('#file-name').textContent = 'Imagem de exemplo'; $('#image-meta').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`; render(); };
+  img.onerror = () => { reportError('example_load_failed'); setStatus('Não foi possível carregar a imagem de exemplo.', true); };
   img.src = '/exemplo-grade.png';
 });
 $('.upload').addEventListener('dragover', e => { e.preventDefault(); $('.upload').classList.add('drag'); });
@@ -232,4 +257,10 @@ $('#tab-sheets').addEventListener('click', () => { view = 'sheets'; render(); })
 $('#prev-sheet').addEventListener('click', () => { state.selected = (state.selected - 1 + currentLayout.pages.length) % currentLayout.pages.length; render(); });
 $('#next-sheet').addEventListener('click', () => { state.selected = (state.selected + 1) % currentLayout.pages.length; render(); });
 $('#download').addEventListener('click', downloadPdf);
+$('#consent-accept').addEventListener('click', () => chooseConsent('accepted'));
+$('#consent-reject').addEventListener('click', () => chooseConsent('rejected'));
+window.addEventListener('usage-choice-changed', updateConsentBanner);
+window.addEventListener('hashchange', renderInfoPage);
 render();
+renderInfoPage();
+updateConsentBanner();
