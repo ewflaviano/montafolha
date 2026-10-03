@@ -32,6 +32,7 @@ O site é distribuído em `https://montafolha.com.br` e `https://www.montafolha.
 - Upload ou arraste de PNG, JPEG e WebP; imagem de exemplo para testar.
 - Grade de até 6 × 6 folhas, formatos A5/A4/A3/A2/Carta/Legal e papel personalizado.
 - Prévia montada e por folha, tamanho final e DPI efetivo.
+- Enquadramento ajustável no eixo recortado, com prévia antes de gerar o PDF.
 - PDF A4 e outros formatos com a arte até as bordas digitais.
 - Aba única de cola à esquerda e acima das novas folhas, para impressora sem bordas.
 - Margens físicas independentes para modo de dobra sem corte, com linhas de dobra e guia opcional.
@@ -39,4 +40,4 @@ O site é distribuído em `https://montafolha.com.br` e `https://www.montafolha.
 
 ## Limites deste MVP
 
-Impressora comum não imprime até a borda física. No modo “Dobrar, sem tesoura”, dobre as margens brancas para trás antes de unir as áreas impressas. O modo de aba única exige impressora sem bordas. Na exportação, as páginas são renderizadas a 150 DPI; a qualidade visível depende da resolução da imagem original. Ainda não há editor de recorte, templates, ZIP, calibração da impressora ou efeitos avançados da especificação.
+Impressora comum não imprime até a borda física. No modo “Dobrar, sem tesoura”, dobre as margens brancas para trás antes de unir as áreas impressas. O modo de aba única exige impressora sem bordas. Na exportação, as páginas são renderizadas a 150 DPI; a qualidade visível depende da resolução da imagem original. Ainda não há zoom, rotação, recorte livre, templates, ZIP, calibração da impressora ou efeitos avançados da especificação.

@@ -34,9 +34,15 @@ export function layout(config) {
   return { W, H, cols, rows, posterW, posterH, pages, margins, overlap, mode };
 }
 
-export function imageCrop(imgW, imgH, posterW, posterH) {
+export function imageCrop(imgW, imgH, posterW, posterH, position = 0.5) {
   const srcRatio = imgW / imgH;
   const dstRatio = posterW / posterH;
-  if (srcRatio > dstRatio) return { x: (imgW - imgH * dstRatio) / 2, y: 0, w: imgH * dstRatio, h: imgH };
-  return { x: 0, y: (imgH - imgW / dstRatio) / 2, w: imgW, h: imgW / dstRatio };
+  const requested = Number(position);
+  const offset = Number.isFinite(requested) ? Math.max(0, Math.min(1, requested)) : 0.5;
+  if (srcRatio > dstRatio) {
+    const w = imgH * dstRatio;
+    return { x: (imgW - w) * offset, y: 0, w, h: imgH };
+  }
+  const h = imgW / dstRatio;
+  return { x: 0, y: (imgH - h) * offset, w: imgW, h };
 }
