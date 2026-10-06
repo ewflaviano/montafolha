@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layout, imageCrop, imagePlacement, pageImageRegion } from './geometry.js';
+import { layout, imageCrop, imagePlacement, pageImageRegion, seamPairs } from './geometry.js';
 const base = { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5 };
 for (const [mode, expectedW, expectedH] of [['zero', 594, 420], ['flap', 584, 410], ['fold', 574, 400]]) {
   test(`${mode}: as folhas cobrem o pôster sem lacunas`, () => {
@@ -94,4 +94,47 @@ test('preencher mantém o recorte deslocável e ocupa todo o pôster', () => {
     paper: { x: 5, y: 5, w: 400, h: 450 },
   });
   assert.throws(() => imagePlacement(1000, 1000, 600, 400, 'invalid'), /inválido/);
+});
+
+test('junções seguem pares adjacentes nas duas direções', () => {
+  const l = layout(base);
+  assert.deepEqual(seamPairs(l, 'vertical').map(({ first, second }) => [first.number, second.number]), [[1, 2], [3, 4]]);
+  assert.deepEqual(seamPairs(l, 'horizontal').map(({ first, second }) => [first.number, second.number]), [[1, 3], [2, 4]]);
+  assert.equal(seamPairs(layout({ ...base, cols: 1, rows: 1 }), 'vertical').length, 0);
+  assert.equal(seamPairs(layout({ ...base, cols: 1, rows: 3 }), 'vertical').length, 0);
+  assert.equal(seamPairs(layout({ ...base, cols: 3, rows: 1 }), 'horizontal').length, 0);
+  assert.equal(seamPairs(layout({ ...base, cols: 6, rows: 6 }), 'vertical').length, 30);
+  assert.equal(seamPairs(layout({ ...base, cols: 6, rows: 6 }), 'horizontal').length, 30);
+  assert.throws(() => seamPairs(l, 'diagonal'), /inválida/);
+});
+
+test('janelas da junção usam bordas da arte, excluindo margens e aba', () => {
+  for (const mode of ['zero', 'flap', 'fold']) {
+    const l = layout({ ...base, mode });
+    for (const direction of ['vertical', 'horizontal']) {
+      const { first, second, firstWindow, secondWindow } = seamPairs(l, direction)[0];
+      if (direction === 'vertical') {
+        assert.equal(firstWindow.x + firstWindow.w, first.art.x + first.art.w);
+        assert.equal(secondWindow.x, second.art.x);
+        assert.equal(first.source.x + first.source.w, second.source.x);
+        assert.equal(firstWindow.h, secondWindow.h);
+      } else {
+        assert.equal(firstWindow.y + firstWindow.h, first.art.y + first.art.h);
+        assert.equal(secondWindow.y, second.art.y);
+        assert.equal(first.source.y + first.source.h, second.source.y);
+        assert.equal(firstWindow.w, secondWindow.w);
+      }
+      for (const [page, window] of [[first, firstWindow], [second, secondWindow]]) {
+        assert.ok(window.x >= page.art.x && window.y >= page.art.y);
+        assert.ok(window.x + window.w <= page.art.x + page.art.w);
+        assert.ok(window.y + window.h <= page.art.y + page.art.h);
+      }
+    }
+  }
+  const flap = layout({ ...base, mode: 'flap' });
+  assert.equal(seamPairs(flap, 'vertical')[0].secondWindow.x, 10);
+  assert.equal(seamPairs(flap, 'horizontal')[0].secondWindow.y, 10);
+  const fold = layout({ ...base, mode: 'fold' });
+  assert.equal(seamPairs(fold, 'vertical')[0].secondWindow.x, 5);
+  assert.equal(seamPairs(fold, 'horizontal')[0].secondWindow.y, 5);
 });

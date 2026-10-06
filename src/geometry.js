@@ -88,3 +88,28 @@ export function pageImageRegion(placement, page) {
     },
   };
 }
+
+// Janelas nas bordas úteis da arte; margens de dobra e aba ficam fora da comparação.
+export function seamPairs(l, direction) {
+  if (!['vertical', 'horizontal'].includes(direction)) throw new Error('Direção de junção inválida.');
+  const pairs = [];
+  for (const first of l.pages) {
+    if (direction === 'vertical' && first.col === l.cols - 1) continue;
+    if (direction === 'horizontal' && first.row === l.rows - 1) continue;
+    const second = l.pages[first.number - 1 + (direction === 'vertical' ? 1 : l.cols)];
+    let firstWindow, secondWindow;
+    if (direction === 'vertical') {
+      const band = Math.min(40, first.art.w / 3, second.art.w / 3);
+      const span = Math.min(150, first.art.h, second.art.h);
+      firstWindow = { x: first.art.x + first.art.w - band, y: first.art.y + (first.art.h - span) / 2, w: band, h: span };
+      secondWindow = { x: second.art.x, y: second.art.y + (second.art.h - span) / 2, w: band, h: span };
+    } else {
+      const band = Math.min(40, first.art.h / 3, second.art.h / 3);
+      const span = Math.min(150, first.art.w, second.art.w);
+      firstWindow = { x: first.art.x + (first.art.w - span) / 2, y: first.art.y + first.art.h - band, w: span, h: band };
+      secondWindow = { x: second.art.x + (second.art.w - span) / 2, y: second.art.y, w: span, h: band };
+    }
+    pairs.push({ first, second, firstWindow, secondWindow });
+  }
+  return pairs;
+}
