@@ -1,12 +1,12 @@
 import { PDFDocument, rgb } from 'pdf-lib';
-import { layout, imagePlacement, pageImageRegion, PAPERS } from './geometry.js';
+import { layout, imagePlacement, pageImageRegion, seamPairs, PAPERS } from './geometry.js';
 import { getChoice, setChoice, pageView, reportError } from './usage.js';
 import './style.css';
 
 const app = document.querySelector('#app');
 const saved = (() => { try { return JSON.parse(localStorage.getItem('montafolha-config') || localStorage.getItem('mosaico-config') || '{}'); } catch { return {}; } })();
 const imageFit = ['contain', 'cover'].includes(saved.imageFit) ? saved.imageFit : 'contain';
-const state = { config: { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5, customW: 210, customH: 297, guide: true, ...saved, imageFit }, image: null, name: '', selected: 0, cropPosition: 0.5, busy: false };
+const state = { config: { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5, customW: 210, customH: 297, guide: true, ...saved, imageFit }, image: null, name: '', selected: 0, seamDirection: 'vertical', seamIndex: 0, cropPosition: 0.5, busy: false };
 
 app.innerHTML = `
   <header class="topbar"><a class="brand" href="#/"><span class="brand-mark">▦</span><span>MontaFolha</span></a><nav class="top-links" aria-label="Navegação"><a href="#/">Criar pôster</a><a href="#/apoiar">Apoiar</a><a href="#/privacidade">Privacidade</a></nav><span class="local-pill">● Sem envio de imagens</span></header>
@@ -18,7 +18,7 @@ app.innerHTML = `
       <section class="panel"><div class="section-title"><b>03</b><h2>Encaixe</h2></div><div class="mode-list"><label class="mode"><input type="radio" name="mode" value="zero"/><span><strong>Sem margem no PDF</strong><small>Sem margem extra; áreas brancas do ajuste permanecem.</small></span></label><label class="mode"><input type="radio" name="mode" value="flap"/><span><strong>Aba única por encaixe</strong><small>Uma faixa branca fica sob a folha vizinha. Exige impressora sem bordas.</small></span></label><label class="mode"><input type="radio" name="mode" value="fold"/><span><strong>Dobrar, sem tesoura</strong><small>Para impressora comum. Dobre as faixas brancas para trás.</small></span></label></div><div id="flap-settings" class="subsettings"><label>Aba de cola (mm)<input data-key="overlap" type="number" min="1" max="40"/></label></div><div id="fold-settings" class="subsettings"><span class="micro">Área não imprimível da sua impressora (mm)</span><div class="field-pair"><label>Esquerda<input data-key="left" type="number" min="0" max="40" step="0.5"/></label><label>Direita<input data-key="right" type="number" min="0" max="40" step="0.5"/></label><label>Superior<input data-key="top" type="number" min="0" max="40" step="0.5"/></label><label>Inferior<input data-key="bottom" type="number" min="0" max="40" step="0.5"/></label></div></div><div id="mode-tip" class="tip"></div></section>
       <section class="panel"><label class="check"><input data-key="guide" type="checkbox"/> Incluir guia de montagem no PDF</label></section>
     </aside>
-    <section class="preview-panel"><div class="preview-head"><div><span class="eyebrow">PRÉ-VISUALIZAÇÃO</span><h2 id="preview-title">Seu pôster</h2></div><div class="view-tabs"><button id="tab-mosaic" class="active" type="button">Montado</button><button id="tab-sheets" type="button">Folhas</button></div></div><div id="crop-control" class="crop-control hidden"><h3>Ajuste da imagem</h3><fieldset class="fit-options"><legend class="sr-only">Como ajustar a imagem ao pôster</legend><label class="mode"><input type="radio" name="image-fit" value="contain"/><span><strong>Imagem inteira</strong><small>Sem corte; espaço restante em branco.</small></span></label><label class="mode"><input type="radio" name="image-fit" value="cover"/><span><strong>Preencher o pôster</strong><small>Ocupa toda a área; pode cortar bordas.</small></span></label></fieldset><p id="crop-help"></p><div id="crop-adjustments"><div class="crop-label"><label for="crop-position" id="crop-axis">Posição horizontal</label><output for="crop-position" id="crop-value">50%</output></div><input id="crop-position" type="range" min="0" max="100" step="1" value="50" aria-describedby="crop-help crop-ends"/><div id="crop-ends" class="crop-ends"><span id="crop-start">Esquerda</span><span id="crop-end">Direita</span></div><button id="crop-reset" type="button">Centralizar</button></div></div><div id="preview-content" class="preview-content"><div class="empty"><div class="empty-icon">▦</div><h3>Comece com uma imagem</h3><p>Depois de escolher o arquivo, você verá o pôster montado e cada folha antes de gerar o PDF.</p></div></div><div id="sheet-nav" class="sheet-nav hidden"><button id="prev-sheet" type="button">← Anterior</button><span id="sheet-counter"></span><button id="next-sheet" type="button">Próxima →</button></div></section>
+    <section class="preview-panel"><div class="preview-head"><div><span class="eyebrow">PRÉ-VISUALIZAÇÃO</span><h2 id="preview-title">Seu pôster</h2></div><div class="view-tabs" role="group" aria-label="Tipo de pré-visualização"><button id="tab-mosaic" class="active" type="button" aria-pressed="true">Montado</button><button id="tab-sheets" type="button" aria-pressed="false">Folhas</button><button id="tab-seams" type="button" aria-pressed="false">Junções</button></div></div><div id="crop-control" class="crop-control hidden"><h3>Ajuste da imagem</h3><fieldset class="fit-options"><legend class="sr-only">Como ajustar a imagem ao pôster</legend><label class="mode"><input type="radio" name="image-fit" value="contain"/><span><strong>Imagem inteira</strong><small>Sem corte; espaço restante em branco.</small></span></label><label class="mode"><input type="radio" name="image-fit" value="cover"/><span><strong>Preencher o pôster</strong><small>Ocupa toda a área; pode cortar bordas.</small></span></label></fieldset><p id="crop-help"></p><div id="crop-adjustments"><div class="crop-label"><label for="crop-position" id="crop-axis">Posição horizontal</label><output for="crop-position" id="crop-value">50%</output></div><input id="crop-position" type="range" min="0" max="100" step="1" value="50" aria-describedby="crop-help crop-ends"/><div id="crop-ends" class="crop-ends"><span id="crop-start">Esquerda</span><span id="crop-end">Direita</span></div><button id="crop-reset" type="button">Centralizar</button></div></div><div id="seam-options" class="seam-options hidden" role="group" aria-label="Direção das junções"><button id="seam-vertical" type="button" aria-pressed="true">↔ Verticais</button><button id="seam-horizontal" type="button" aria-pressed="false">↕ Horizontais</button></div><div id="preview-content" class="preview-content"><div class="empty"><div class="empty-icon">▦</div><h3>Comece com uma imagem</h3><p>Depois de escolher o arquivo, você verá o pôster montado e cada folha antes de gerar o PDF.</p></div></div><div id="sheet-nav" class="sheet-nav hidden"><button id="prev-sheet" type="button">← Anterior</button><span id="sheet-counter"></span><button id="next-sheet" type="button">Próxima →</button></div><div id="seam-nav" class="sheet-nav hidden"><button id="prev-seam" type="button">← Anterior</button><span id="seam-counter" role="status" aria-live="polite"></span><button id="next-seam" type="button">Próxima →</button></div></section>
     <aside class="summary"><span class="eyebrow">RESUMO</span><h2>Pronto para imprimir</h2><div class="summary-card"><div><span>Divisão</span><strong id="summary-grid">2 × 2 folhas</strong></div><div><span>Papel</span><strong id="summary-paper">A4 · Paisagem</strong></div><div><span>Pôster montado</span><strong id="summary-size">—</strong></div><div><span>Qualidade da imagem</span><strong id="summary-dpi">—</strong></div></div><div id="physical-note" class="physical-note"></div><button id="download" class="primary" type="button" disabled>↓ Gerar PDF</button><p id="status" class="status" role="status"></p><div class="mini-note">Imprima em <strong>tamanho real (100%)</strong>. Desative “ajustar à página” no diálogo de impressão.</div></aside>
   </main>
   <section id="info-page" class="info-page hidden"></section>
@@ -106,17 +106,64 @@ function drawPage(canvas, page, l, resolution = 2, markings = true, placement = 
   }
 }
 
+function sheetLabel(page) { return `folha ${page.number} · ${String.fromCharCode(65 + page.col)}${page.row + 1}`; }
+
+function drawSeamPart(ctx, page, window, destination, placement) {
+  const region = pageImageRegion(placement, page);
+  if (!region) return;
+  const { paper, source } = region;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(destination.x, destination.y, destination.w, destination.h); ctx.clip();
+  ctx.drawImage(state.image, source.x, source.y, source.w, source.h,
+    destination.x + (paper.x - window.x) * destination.w / window.w,
+    destination.y + (paper.y - window.y) * destination.h / window.h,
+    paper.w * destination.w / window.w, paper.h * destination.h / window.h);
+  ctx.restore();
+}
+
+function renderSeam(l, pair, placement) {
+  const { first, second, firstWindow, secondWindow } = pair;
+  const vertical = state.seamDirection === 'vertical';
+  const width = vertical ? firstWindow.w + secondWindow.w : firstWindow.w;
+  const height = vertical ? firstWindow.h : firstWindow.h + secondWindow.h;
+  const scale = Math.min(3, 760 / width, 520 / height);
+  const firstSize = Math.max(1, Math.round((vertical ? firstWindow.w : firstWindow.h) * scale));
+  const secondSize = Math.max(1, Math.round((vertical ? secondWindow.w : secondWindow.h) * scale));
+  const spanSize = Math.max(1, Math.round((vertical ? height : width) * scale));
+  $('#preview-content').innerHTML = '<div class="seam-preview"><h3 id="seam-title"></h3><p>Compare as bordas da arte das folhas vizinhas.</p><div class="seam-canvas-wrap"><canvas id="seam-canvas" role="img"></canvas></div><div id="seam-labels" class="seam-labels"></div><p class="seam-warning">Esta é a junção digital. Imprima em tamanho real (100%) e confira as bordas físicas da impressora.</p></div>';
+  $('#seam-title').textContent = `Emenda ${vertical ? 'vertical' : 'horizontal'}`;
+  const canvas = $('#seam-canvas');
+  canvas.width = vertical ? firstSize + secondSize : spanSize;
+  canvas.height = vertical ? spanSize : firstSize + secondSize;
+  canvas.setAttribute('aria-label', `Junção entre ${sheetLabel(first)} e ${sheetLabel(second)}; a linha laranja marca o encontro da arte.`);
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  drawSeamPart(ctx, first, firstWindow, { x: 0, y: 0, w: vertical ? firstSize : spanSize, h: vertical ? spanSize : firstSize }, placement);
+  drawSeamPart(ctx, second, secondWindow, { x: vertical ? firstSize : 0, y: vertical ? 0 : firstSize, w: vertical ? secondSize : spanSize, h: vertical ? spanSize : secondSize }, placement);
+  ctx.save(); ctx.strokeStyle = '#cf633f'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.beginPath();
+  if (vertical) { ctx.moveTo(firstSize, 0); ctx.lineTo(firstSize, canvas.height); }
+  else { ctx.moveTo(0, firstSize); ctx.lineTo(canvas.width, firstSize); }
+  ctx.stroke(); ctx.restore();
+  $('#seam-labels').textContent = `${sheetLabel(first)}  |  ${sheetLabel(second)}`;
+}
+
 function render() {
   syncControls();
   try { currentLayout = layout(state.config); setStatus(''); } catch (e) { currentLayout = null; setStatus(e.message, true); }
   const l = currentLayout;
   $('#crop-control').classList.toggle('hidden', !l || !state.image);
   $('#download').disabled = !l || !state.image || state.busy;
-  if (!l) return;
-  $('#summary-grid').textContent = `${l.cols} × ${l.rows} folhas`;
+  if (!l) {
+    $('#sheet-nav').classList.add('hidden');
+    $('#seam-nav').classList.add('hidden');
+    $('#preview-content').innerHTML = '<div class="empty"><h3>Confira as medidas do papel</h3><p>Corrija a configuração para ver a prévia.</p></div>';
+    return;
+  }
+  const sheetNoun = l.pages.length === 1 ? 'folha' : 'folhas';
+  $('#summary-grid').textContent = `${l.cols} × ${l.rows} ${sheetNoun}`;
   $('#summary-paper').textContent = `${state.config.paper} · ${state.config.orientation === 'landscape' ? 'Paisagem' : 'Retrato'}`;
   $('#summary-size').textContent = `${fmt(l.posterW / 10)} × ${fmt(l.posterH / 10)} cm`;
-  $('#preview-title').textContent = `${l.cols} × ${l.rows} folhas · ${fmt(l.posterW / 10)} × ${fmt(l.posterH / 10)} cm`;
+  $('#preview-title').textContent = `${l.cols} × ${l.rows} ${sheetNoun} · ${fmt(l.posterW / 10)} × ${fmt(l.posterH / 10)} cm`;
   if (state.image) {
     const placement = placementFor(l);
     updateCropControl(placement);
@@ -130,8 +177,21 @@ function render() {
     : state.config.mode === 'flap' ? '<strong>Uma aba por junção</strong><p>Cole a faixa branca da folha nova atrás da folha anterior. Este modo exige impressão sem bordas nas outras extremidades.</p>'
       : '<strong>Montagem sem corte</strong><p>Dobre as margens brancas para trás. Nos encaixes internos, dobre as duas folhas antes de aproximar as linhas da imagem.</p>';
   $('#sheet-nav').classList.toggle('hidden', view !== 'sheets' || !state.image);
-  $('#tab-mosaic').classList.toggle('active', view === 'mosaic'); $('#tab-sheets').classList.toggle('active', view === 'sheets');
-  if (!state.image) return;
+  $('#seam-nav').classList.toggle('hidden', view !== 'seams' || !state.image);
+  $('#seam-options').classList.toggle('hidden', view !== 'seams');
+  for (const [id, name] of [['tab-mosaic', 'mosaic'], ['tab-sheets', 'sheets'], ['tab-seams', 'seams']]) {
+    const active = view === name;
+    $(`#${id}`).classList.toggle('active', active);
+    $(`#${id}`).setAttribute('aria-pressed', String(active));
+  }
+  for (const [id, direction] of [['seam-vertical', 'vertical'], ['seam-horizontal', 'horizontal']]) {
+    $(`#${id}`).setAttribute('aria-pressed', String(state.seamDirection === direction));
+  }
+  if (!state.image) {
+    $('#seam-nav').classList.add('hidden');
+    $('#preview-content').innerHTML = '<div class="empty"><div class="empty-icon">▦</div><h3>Comece com uma imagem</h3><p>Depois de escolher o arquivo, você poderá conferir o pôster, as folhas e as junções antes de gerar o PDF.</p></div>';
+    return;
+  }
   if (view === 'mosaic') {
     $('#preview-content').innerHTML = '<div class="mosaic-wrap"><canvas id="mosaic"></canvas></div><div class="preview-caption">As linhas mostram onde as folhas se encontram.</div>';
     const canvas = $('#mosaic'); const scale = Math.min(1.3, 740 / l.posterW, 490 / l.posterH);
@@ -142,12 +202,22 @@ function render() {
     ctx.drawImage(state.image, source.x, source.y, source.w, source.h, poster.x * canvas.width / l.posterW, poster.y * canvas.height / l.posterH, poster.w * canvas.width / l.posterW, poster.h * canvas.height / l.posterH);
     ctx.strokeStyle = 'rgba(35,95,96,.85)'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
     l.pages.forEach(p => ctx.strokeRect(p.source.x * scale, p.source.y * scale, p.source.w * scale, p.source.h * scale));
-  } else {
+  } else if (view === 'sheets') {
     state.selected = Math.min(state.selected, l.pages.length - 1);
     const page = l.pages[state.selected];
     $('#preview-content').innerHTML = '<div class="sheet-wrap"><canvas id="sheet"></canvas></div><div class="preview-caption">Linha laranja: dobre a faixa branca ou use como aba, conforme o modo.</div>';
     drawPage($('#sheet'), page, l, Math.min(2, 620 / l.W, 470 / l.H));
     $('#sheet-counter').textContent = `Folha ${page.number} de ${l.pages.length} · coluna ${page.col + 1}, linha ${page.row + 1}`;
+  } else {
+    const pairs = seamPairs(l, state.seamDirection);
+    state.seamIndex = Math.min(state.seamIndex, Math.max(0, pairs.length - 1));
+    $('#seam-nav').classList.toggle('hidden', pairs.length === 0);
+    if (!pairs.length) {
+      $('#preview-content').innerHTML = `<div class="empty"><div class="empty-icon">▦</div><h3>Sem junções ${state.seamDirection === 'vertical' ? 'verticais' : 'horizontais'}</h3><p>${state.seamDirection === 'vertical' ? 'Use pelo menos duas colunas' : 'Use pelo menos duas linhas'} para conferir uma emenda nesta direção.</p></div>`;
+      return;
+    }
+    renderSeam(l, pairs[state.seamIndex], placementFor(l));
+    $('#seam-counter').textContent = `Junção ${state.seamIndex + 1} de ${pairs.length}`;
   }
 }
 
@@ -272,7 +342,7 @@ async function downloadPdf() {
     const bytes = await pdf.save(); const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     const a = document.createElement('a'); a.href = url; a.download = `montafolha-${l.cols}x${l.rows}-${paper.toLowerCase()}.pdf`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    setStatus(`PDF gerado: ${l.pages.length} folhas${includeGuide ? ' + guia' : ''}.`);
+    setStatus(`PDF gerado: ${l.pages.length} ${l.pages.length === 1 ? 'folha' : 'folhas'}${includeGuide ? ' + guia' : ''}.`);
   } catch (e) { console.error(e); reportError('pdf_generation_failed'); setStatus('Falha ao gerar PDF. Tente uma imagem menor ou outra configuração.', true); }
   finally { state.busy = false; $('#download').textContent = '↓ Gerar PDF'; $('#download').disabled = !state.image || !currentLayout; $('#crop-position').disabled = false; $('#crop-reset').disabled = false; app.querySelectorAll('input[name="image-fit"]').forEach(el => { el.disabled = false; }); }
 }
@@ -304,6 +374,11 @@ $('.upload').addEventListener('dragleave', () => $('.upload').classList.remove('
 $('.upload').addEventListener('drop', e => { e.preventDefault(); $('.upload').classList.remove('drag'); loadFile(e.dataTransfer.files[0]); });
 $('#tab-mosaic').addEventListener('click', () => { view = 'mosaic'; render(); });
 $('#tab-sheets').addEventListener('click', () => { view = 'sheets'; render(); });
+$('#tab-seams').addEventListener('click', () => { view = 'seams'; render(); });
+$('#seam-vertical').addEventListener('click', () => { state.seamDirection = 'vertical'; state.seamIndex = 0; render(); });
+$('#seam-horizontal').addEventListener('click', () => { state.seamDirection = 'horizontal'; state.seamIndex = 0; render(); });
+$('#prev-seam').addEventListener('click', () => { const count = currentLayout ? seamPairs(currentLayout, state.seamDirection).length : 0; if (count) { state.seamIndex = (state.seamIndex - 1 + count) % count; render(); } });
+$('#next-seam').addEventListener('click', () => { const count = currentLayout ? seamPairs(currentLayout, state.seamDirection).length : 0; if (count) { state.seamIndex = (state.seamIndex + 1) % count; render(); } });
 $('#prev-sheet').addEventListener('click', () => { state.selected = (state.selected - 1 + currentLayout.pages.length) % currentLayout.pages.length; render(); });
 $('#next-sheet').addEventListener('click', () => { state.selected = (state.selected + 1) % currentLayout.pages.length; render(); });
 $('#download').addEventListener('click', downloadPdf);
