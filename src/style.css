@@ -33,3 +33,14 @@
 .seam-labels{font-size:12px;font-weight:700;color:#3b6266;margin:10px 0 14px}
 .seam-preview .seam-warning{background:#eef5f1;border-left:3px solid #3b8d7f;border-radius:6px;color:#435e61;padding:10px 12px;text-align:left;font-size:12px;margin:0}
 @media(max-width:720px){.preview-head{display:block}.view-tabs{display:flex;margin-top:13px;width:100%}.view-tabs button{flex:1;min-width:0;padding:9px 5px}.seam-options button{flex:1}.seam-canvas-wrap{min-height:220px}}
+
+.rotation-control{margin-top:15px;padding-top:13px;border-top:1px solid #e8ebe7}
+.rotation-control>strong{font-size:13px}
+.rotation-control p{font-size:12px;line-height:1.45;color:#60747b;margin:5px 0 10px}
+.rotation-actions{display:flex;gap:8px}
+.rotation-actions button{flex:1;min-width:0;border:1px solid #b8cac3;border-radius:8px;background:#f5faf8;color:#1c7166;padding:9px 6px;font-size:12px;font-weight:700}
+.rotation-actions button:hover{background:#e6f3ef}
+.rotation-actions button:focus-visible{outline:3px solid #2f8578;outline-offset:2px}
+.rotation-actions button:disabled{opacity:.5;cursor:not-allowed}
+.rotation-control .rotation-state{margin:9px 0 0}
+.rotation-state b{color:#173241}

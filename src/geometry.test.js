@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layout, imageCrop, imagePlacement, pageImageRegion, seamPairs } from './geometry.js';
+import { layout, imageCrop, imagePlacement, orientedImageSize, originalImageRegion, pageImageRegion, seamPairs } from './geometry.js';
 const base = { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5 };
 for (const [mode, expectedW, expectedH] of [['zero', 594, 420], ['flap', 584, 410], ['fold', 574, 400]]) {
   test(`${mode}: as folhas cobrem o pôster sem lacunas`, () => {
@@ -94,6 +94,42 @@ test('preencher mantém o recorte deslocável e ocupa todo o pôster', () => {
     paper: { x: 5, y: 5, w: 400, h: 450 },
   });
   assert.throws(() => imagePlacement(1000, 1000, 600, 400, 'invalid'), /inválido/);
+});
+
+test('rotação troca dimensões virtuais e mapeia cada quadrante à imagem original', () => {
+  assert.deepEqual([0, 1, 2, 3].map(turn => orientedImageSize(400, 200, turn)), [
+    { w: 400, h: 200 }, { w: 200, h: 400 }, { w: 400, h: 200 }, { w: 200, h: 400 },
+  ]);
+  const crop = { x: 30, y: 80, w: 40, h: 70 };
+  assert.deepEqual(originalImageRegion(crop, 400, 200, 0), crop);
+  assert.deepEqual(originalImageRegion(crop, 400, 200, 1), { x: 80, y: 130, w: 70, h: 40 });
+  assert.deepEqual(originalImageRegion(crop, 400, 200, 2), { x: 330, y: 50, w: 40, h: 70 });
+  assert.deepEqual(originalImageRegion(crop, 400, 200, 3), { x: 250, y: 30, w: 70, h: 40 });
+  assert.throws(() => originalImageRegion(crop, 400, 200, 4), /inválida/);
+});
+
+test('recorte girado permanece nas áreas de arte em todos os encaixes', () => {
+  for (const mode of ['zero', 'flap', 'fold']) {
+    const l = layout({ ...base, mode });
+    for (const turns of [0, 1, 2, 3]) {
+      const { w, h } = orientedImageSize(1600, 900, turns);
+      for (const fit of ['contain', 'cover']) {
+        const placement = imagePlacement(w, h, l.posterW, l.posterH, fit);
+        for (const page of l.pages) {
+          const region = pageImageRegion(placement, page);
+          if (!region) continue;
+          const original = originalImageRegion(region.source, 1600, 900, turns);
+          assert.ok(original.x >= -1e-8 && original.y >= -1e-8);
+          assert.ok(original.x + original.w <= 1600 + 1e-8);
+          assert.ok(original.y + original.h <= 900 + 1e-8);
+          assert.ok(region.paper.x >= page.art.x - 1e-8);
+          assert.ok(region.paper.y >= page.art.y - 1e-8);
+          assert.ok(region.paper.x + region.paper.w <= page.art.x + page.art.w + 1e-8);
+          assert.ok(region.paper.y + region.paper.h <= page.art.y + page.art.h + 1e-8);
+        }
+      }
+    }
+  }
 });
 
 test('junções seguem pares adjacentes nas duas direções', () => {

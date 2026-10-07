@@ -66,6 +66,22 @@ export function imagePlacement(imgW, imgH, posterW, posterH, fit = 'contain', po
   };
 }
 
+export function orientedImageSize(imgW, imgH, turns) {
+  return turns % 2 === 0 ? { w: imgW, h: imgH } : { w: imgH, h: imgW };
+}
+
+// Converte uma região da imagem girada em coordenadas da imagem original.
+export function originalImageRegion(region, imgW, imgH, turns) {
+  const { x, y, w, h } = region;
+  switch (turns) {
+    case 0: return { x, y, w, h };
+    case 1: return { x: y, y: imgH - x - w, w: h, h: w };
+    case 2: return { x: imgW - x - w, y: imgH - y - h, w, h };
+    case 3: return { x: imgW - y - h, y: x, w: h, h: w };
+    default: throw new Error('Rotação inválida.');
+  }
+}
+
 export function pageImageRegion(placement, page) {
   const { poster, source } = placement;
   const left = Math.max(poster.x, page.source.x);
