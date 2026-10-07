@@ -1,19 +1,19 @@
 import { PDFDocument, rgb } from 'pdf-lib';
-import { layout, imagePlacement, pageImageRegion, seamPairs, PAPERS } from './geometry.js';
+import { layout, imagePlacement, orientedImageSize, originalImageRegion, pageImageRegion, seamPairs, PAPERS } from './geometry.js';
 import { getChoice, setChoice, pageView, reportError } from './usage.js';
 import './style.css';
 
 const app = document.querySelector('#app');
 const saved = (() => { try { return JSON.parse(localStorage.getItem('montafolha-config') || localStorage.getItem('mosaico-config') || '{}'); } catch { return {}; } })();
 const imageFit = ['contain', 'cover'].includes(saved.imageFit) ? saved.imageFit : 'contain';
-const state = { config: { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5, customW: 210, customH: 297, guide: true, ...saved, imageFit }, image: null, name: '', selected: 0, seamDirection: 'vertical', seamIndex: 0, cropPosition: 0.5, busy: false };
+const state = { config: { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5, customW: 210, customH: 297, guide: true, ...saved, imageFit }, image: null, name: '', selected: 0, seamDirection: 'vertical', seamIndex: 0, cropPosition: 0.5, rotation: 0, busy: false };
 
 app.innerHTML = `
   <header class="topbar"><a class="brand" href="#/"><span class="brand-mark">▦</span><span>MontaFolha</span></a><nav class="top-links" aria-label="Navegação"><a href="#/">Criar pôster</a><a href="#/apoiar">Apoiar</a><a href="#/privacidade">Privacidade</a></nav><span class="local-pill">● Sem envio de imagens</span></header>
   <main class="workspace">
     <aside class="controls">
       <div class="aside-heading"><span class="eyebrow">PROJETO</span><h1>Monte seu pôster</h1><p>Escolha a imagem, o papel e como as folhas se encontram.</p></div>
-      <section class="panel"><div class="section-title"><b>01</b><h2>Imagem</h2></div><label class="upload" for="file"><span class="upload-icon">↑</span><strong id="file-name">Clique ou arraste uma imagem</strong><small>PNG, JPEG ou WebP</small></label><input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden/><button id="try-example" class="example-button" type="button">Testar com imagem de exemplo →</button><div id="image-meta" class="micro"></div></section>
+      <section class="panel"><div class="section-title"><b>01</b><h2>Imagem</h2></div><label class="upload" for="file"><span class="upload-icon">↑</span><strong id="file-name">Clique ou arraste uma imagem</strong><small>PNG, JPEG ou WebP</small></label><input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden/><button id="try-example" class="example-button" type="button">Testar com imagem de exemplo →</button><div id="image-meta" class="micro"></div><div id="rotation-control" class="rotation-control hidden"><strong>Girar imagem</strong><p>Gire a arte sem mudar o papel. Ao girar, o recorte volta ao centro.</p><div class="rotation-actions"><button id="rotate-left" type="button" aria-label="Girar imagem 90 graus para a esquerda">↶ Girar à esquerda</button><button id="rotate-right" type="button" aria-label="Girar imagem 90 graus para a direita">↷ Girar à direita</button></div><p class="rotation-state" role="status">Orientação da imagem: <b id="rotation-angle">0°</b></p></div></section>
       <section class="panel"><div class="section-title"><b>02</b><h2>Divisão e papel</h2></div><div class="field-pair"><label>Colunas<input data-key="cols" type="number" min="1" max="6"/></label><label>Linhas<input data-key="rows" type="number" min="1" max="6"/></label></div><div class="field-pair"><label>Papel<select data-key="paper">${[...Object.keys(PAPERS), 'Personalizado'].map(x => `<option>${x}</option>`).join('')}</select></label><label>Orientação<select data-key="orientation"><option value="landscape">Paisagem</option><option value="portrait">Retrato</option></select></label></div><div id="custom-paper" class="field-pair"><label>Largura (mm)<input data-key="customW" type="number" min="50" max="1200"/></label><label>Altura (mm)<input data-key="customH" type="number" min="50" max="1200"/></label></div></section>
       <section class="panel"><div class="section-title"><b>03</b><h2>Encaixe</h2></div><div class="mode-list"><label class="mode"><input type="radio" name="mode" value="zero"/><span><strong>Sem margem no PDF</strong><small>Sem margem extra; áreas brancas do ajuste permanecem.</small></span></label><label class="mode"><input type="radio" name="mode" value="flap"/><span><strong>Aba única por encaixe</strong><small>Uma faixa branca fica sob a folha vizinha. Exige impressora sem bordas.</small></span></label><label class="mode"><input type="radio" name="mode" value="fold"/><span><strong>Dobrar, sem tesoura</strong><small>Para impressora comum. Dobre as faixas brancas para trás.</small></span></label></div><div id="flap-settings" class="subsettings"><label>Aba de cola (mm)<input data-key="overlap" type="number" min="1" max="40"/></label></div><div id="fold-settings" class="subsettings"><span class="micro">Área não imprimível da sua impressora (mm)</span><div class="field-pair"><label>Esquerda<input data-key="left" type="number" min="0" max="40" step="0.5"/></label><label>Direita<input data-key="right" type="number" min="0" max="40" step="0.5"/></label><label>Superior<input data-key="top" type="number" min="0" max="40" step="0.5"/></label><label>Inferior<input data-key="bottom" type="number" min="0" max="40" step="0.5"/></label></div></div><div id="mode-tip" class="tip"></div></section>
       <section class="panel"><label class="check"><input data-key="guide" type="checkbox"/> Incluir guia de montagem no PDF</label></section>
@@ -30,16 +30,39 @@ let view = 'mosaic';
 let currentLayout;
 let cropRenderFrame = null;
 
-function placementFor(l, image = state.image) {
-  return imagePlacement(image.naturalWidth, image.naturalHeight, l.posterW, l.posterH, state.config.imageFit, state.cropPosition);
+function placementFor(l, image = state.image, rotation = state.rotation) {
+  const size = orientedImageSize(image.naturalWidth, image.naturalHeight, rotation);
+  return imagePlacement(size.w, size.h, l.posterW, l.posterH, state.config.imageFit, state.cropPosition);
+}
+
+function drawOrientedImage(ctx, image, source, destination, rotation = state.rotation) {
+  const { x, y, w, h } = destination;
+  const original = originalImageRegion(source, image.naturalWidth, image.naturalHeight, rotation);
+  ctx.save();
+  if (rotation === 1) {
+    ctx.translate(x + w, y);
+    ctx.rotate(Math.PI / 2);
+  } else if (rotation === 2) {
+    ctx.translate(x + w, y + h);
+    ctx.rotate(Math.PI);
+  } else if (rotation === 3) {
+    ctx.translate(x, y + h);
+    ctx.rotate(-Math.PI / 2);
+  } else {
+    ctx.translate(x, y);
+  }
+  ctx.drawImage(image, original.x, original.y, original.w, original.h,
+    0, 0, rotation % 2 ? h : w, rotation % 2 ? w : h);
+  ctx.restore();
 }
 
 function updateCropControl(placement) {
   const { source } = placement;
-  const spareX = state.image.naturalWidth - source.w;
-  const spareY = state.image.naturalHeight - source.h;
+  const size = orientedImageSize(state.image.naturalWidth, state.image.naturalHeight, state.rotation);
+  const spareX = size.w - source.w;
+  const spareY = size.h - source.h;
   // Evita oferecer um controle quando a diferença de proporção é quase invisível.
-  const hasCrop = placement.fit === 'cover' && Math.max(spareX / state.image.naturalWidth, spareY / state.image.naturalHeight) >= 0.01;
+  const hasCrop = placement.fit === 'cover' && Math.max(spareX / size.w, spareY / size.h) >= 0.01;
   const horizontal = spareX > spareY;
   $('#crop-help').textContent = placement.fit === 'contain'
     ? 'A imagem inteira fica centralizada. As áreas restantes serão brancas no PDF.'
@@ -88,17 +111,17 @@ function syncControls() {
   $('#mode-tip').textContent = state.config.mode === 'zero' ? 'O PDF não terá margem. A impressora só imprimirá até a borda se oferecer modo sem bordas.' : state.config.mode === 'flap' ? 'Aba à esquerda e acima das novas folhas. A arte das folhas vizinhas precisa chegar à borda física; use impressora sem bordas.' : 'Dobre todas as faixas brancas para trás na linha pontilhada. Em encaixes internos, as duas folhas terão dobra.';
 }
 
-function drawPage(canvas, page, l, resolution = 2, markings = true, placement = null, image = state.image) {
+function drawPage(canvas, page, l, resolution = 2, markings = true, placement = null, image = state.image, rotation = state.rotation) {
   const scale = resolution;
   canvas.width = Math.round(l.W * scale);
   canvas.height = Math.round(l.H * scale);
   const ctx = canvas.getContext('2d', { alpha: false });
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (!image) return;
-  const region = pageImageRegion(placement || placementFor(l, image), page);
+  const region = pageImageRegion(placement || placementFor(l, image, rotation), page);
   if (region) {
     const { source, paper } = region;
-    ctx.drawImage(image, source.x, source.y, source.w, source.h, paper.x * scale, paper.y * scale, paper.w * scale, paper.h * scale);
+    drawOrientedImage(ctx, image, source, { x: paper.x * scale, y: paper.y * scale, w: paper.w * scale, h: paper.h * scale }, rotation);
   }
   if (markings && l.mode !== 'zero') {
     ctx.save(); ctx.strokeStyle = '#e27b56'; ctx.lineWidth = Math.max(1, scale * .22); ctx.setLineDash([2 * scale, 2 * scale]);
@@ -114,10 +137,11 @@ function drawSeamPart(ctx, page, window, destination, placement) {
   const { paper, source } = region;
   ctx.save();
   ctx.beginPath(); ctx.rect(destination.x, destination.y, destination.w, destination.h); ctx.clip();
-  ctx.drawImage(state.image, source.x, source.y, source.w, source.h,
-    destination.x + (paper.x - window.x) * destination.w / window.w,
-    destination.y + (paper.y - window.y) * destination.h / window.h,
-    paper.w * destination.w / window.w, paper.h * destination.h / window.h);
+  drawOrientedImage(ctx, state.image, source, {
+    x: destination.x + (paper.x - window.x) * destination.w / window.w,
+    y: destination.y + (paper.y - window.y) * destination.h / window.h,
+    w: paper.w * destination.w / window.w, h: paper.h * destination.h / window.h,
+  });
   ctx.restore();
 }
 
@@ -149,6 +173,10 @@ function renderSeam(l, pair, placement) {
 
 function render() {
   syncControls();
+  $('#rotation-control').classList.toggle('hidden', !state.image);
+  $('#rotation-angle').textContent = ['0°', '90° à direita', '180°', '90° à esquerda'][state.rotation];
+  $('#rotate-left').disabled = state.busy;
+  $('#rotate-right').disabled = state.busy;
   try { currentLayout = layout(state.config); setStatus(''); } catch (e) { currentLayout = null; setStatus(e.message, true); }
   const l = currentLayout;
   $('#crop-control').classList.toggle('hidden', !l || !state.image);
@@ -199,7 +227,7 @@ function render() {
     const ctx = canvas.getContext('2d'); const placement = placementFor(l);
     const { source, poster } = placement;
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(state.image, source.x, source.y, source.w, source.h, poster.x * canvas.width / l.posterW, poster.y * canvas.height / l.posterH, poster.w * canvas.width / l.posterW, poster.h * canvas.height / l.posterH);
+    drawOrientedImage(ctx, state.image, source, { x: poster.x * canvas.width / l.posterW, y: poster.y * canvas.height / l.posterH, w: poster.w * canvas.width / l.posterW, h: poster.h * canvas.height / l.posterH });
     ctx.strokeStyle = 'rgba(35,95,96,.85)'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
     l.pages.forEach(p => ctx.strokeRect(p.source.x * scale, p.source.y * scale, p.source.w * scale, p.source.h * scale));
   } else if (view === 'sheets') {
@@ -226,14 +254,14 @@ async function loadFile(file) {
   if (file.size > 80 * 1024 * 1024) { setStatus('Imagem acima de 80 MB. Escolha um arquivo menor.', true); return; }
   const url = URL.createObjectURL(file);
   const img = new Image();
-  img.onload = () => { state.image = img; state.name = file.name; state.cropPosition = 0.5; $('#file-name').textContent = file.name; $('#image-meta').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`; render(); };
+  img.onload = () => { state.image = img; state.name = file.name; state.cropPosition = 0.5; state.rotation = 0; $('#file-name').textContent = file.name; $('#image-meta').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`; render(); };
   img.onerror = () => { URL.revokeObjectURL(url); reportError('image_decode_failed'); setStatus('Não foi possível ler a imagem.', true); };
   img.src = url;
 }
 
 const mmToPt = mm => mm * 72 / 25.4;
 
-async function addAssemblyGuide(pdf, l, placement = placementFor(l), image = state.image) {
+async function addAssemblyGuide(pdf, l, placement = placementFor(l), image = state.image, rotation = state.rotation) {
   const guide = pdf.addPage([mmToPt(210), mmToPt(297)]);
   const pageW = guide.getWidth();
   const pageH = guide.getHeight();
@@ -263,7 +291,7 @@ async function addAssemblyGuide(pdf, l, placement = placementFor(l), image = sta
   const ctx = canvas.getContext('2d', { alpha: false });
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const { source, poster } = placement;
-  ctx.drawImage(image, source.x, source.y, source.w, source.h, poster.x * canvas.width / l.posterW, poster.y * canvas.height / l.posterH, poster.w * canvas.width / l.posterW, poster.h * canvas.height / l.posterH);
+  drawOrientedImage(ctx, image, source, { x: poster.x * canvas.width / l.posterW, y: poster.y * canvas.height / l.posterH, w: poster.w * canvas.width / l.posterW, h: poster.h * canvas.height / l.posterH }, rotation);
   const thumbnail = await pdf.embedJpg(await (await fetch(canvas.toDataURL('image/jpeg', .86))).arrayBuffer());
   guide.drawImage(thumbnail, { x: gridX, y: gridY, width: gridW, height: gridH });
 
@@ -315,15 +343,16 @@ async function downloadPdf() {
   if (!state.image || !currentLayout || state.busy) return;
   state.busy = true; $('#download').disabled = true; $('#download').textContent = 'Gerando PDF…'; setStatus('Preparando as folhas no seu dispositivo…');
   $('#crop-position').disabled = true; $('#crop-reset').disabled = true;
+  $('#rotate-left').disabled = true; $('#rotate-right').disabled = true;
   app.querySelectorAll('input[name="image-fit"]').forEach(el => { el.disabled = true; });
   try {
-    const l = currentLayout; const image = state.image; const placement = placementFor(l, image);
+    const l = currentLayout; const image = state.image; const rotation = state.rotation; const placement = placementFor(l, image, rotation);
     const includeGuide = state.config.guide; const paper = state.config.paper;
     const pdf = await PDFDocument.create();
     for (const page of l.pages) {
       const canvas = document.createElement('canvas');
       // 150 DPI para limitar uso de memória; nunca altera as medidas físicas.
-      drawPage(canvas, page, l, 150 / 25.4, false, placement, image);
+      drawPage(canvas, page, l, 150 / 25.4, false, placement, image, rotation);
       const bytes = await (await fetch(canvas.toDataURL('image/jpeg', .93))).arrayBuffer();
       const embedded = await pdf.embedJpg(bytes);
       const sheet = pdf.addPage([mmToPt(l.W), mmToPt(l.H)]);
@@ -338,13 +367,13 @@ async function downloadPdf() {
         }
       }
     }
-    if (includeGuide) await addAssemblyGuide(pdf, l, placement, image);
+    if (includeGuide) await addAssemblyGuide(pdf, l, placement, image, rotation);
     const bytes = await pdf.save(); const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     const a = document.createElement('a'); a.href = url; a.download = `montafolha-${l.cols}x${l.rows}-${paper.toLowerCase()}.pdf`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     setStatus(`PDF gerado: ${l.pages.length} ${l.pages.length === 1 ? 'folha' : 'folhas'}${includeGuide ? ' + guia' : ''}.`);
   } catch (e) { console.error(e); reportError('pdf_generation_failed'); setStatus('Falha ao gerar PDF. Tente uma imagem menor ou outra configuração.', true); }
-  finally { state.busy = false; $('#download').textContent = '↓ Gerar PDF'; $('#download').disabled = !state.image || !currentLayout; $('#crop-position').disabled = false; $('#crop-reset').disabled = false; app.querySelectorAll('input[name="image-fit"]').forEach(el => { el.disabled = false; }); }
+  finally { state.busy = false; $('#download').textContent = '↓ Gerar PDF'; $('#download').disabled = !state.image || !currentLayout; $('#crop-position').disabled = false; $('#crop-reset').disabled = false; $('#rotate-left').disabled = false; $('#rotate-right').disabled = false; app.querySelectorAll('input[name="image-fit"]').forEach(el => { el.disabled = false; }); }
 }
 
 app.addEventListener('change', e => {
@@ -363,9 +392,17 @@ $('#crop-position').addEventListener('input', e => {
   cropRenderFrame = requestAnimationFrame(() => { cropRenderFrame = null; render(); });
 });
 $('#crop-reset').addEventListener('click', () => { state.cropPosition = 0.5; render(); $('#crop-position').focus(); });
+function rotateImage(delta) {
+  if (!state.image || state.busy) return;
+  state.rotation = (state.rotation + delta + 4) % 4;
+  state.cropPosition = 0.5;
+  render();
+}
+$('#rotate-left').addEventListener('click', () => rotateImage(-1));
+$('#rotate-right').addEventListener('click', () => rotateImage(1));
 $('#try-example').addEventListener('click', () => {
   const img = new Image();
-  img.onload = () => { state.image = img; state.name = 'exemplo-grade.png'; state.cropPosition = 0.5; $('#file-name').textContent = 'Imagem de exemplo'; $('#image-meta').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`; render(); };
+  img.onload = () => { state.image = img; state.name = 'exemplo-grade.png'; state.cropPosition = 0.5; state.rotation = 0; $('#file-name').textContent = 'Imagem de exemplo'; $('#image-meta').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`; render(); };
   img.onerror = () => { reportError('example_load_failed'); setStatus('Não foi possível carregar a imagem de exemplo.', true); };
   img.src = '/exemplo-grade.png';
 });

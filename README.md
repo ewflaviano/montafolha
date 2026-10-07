@@ -34,6 +34,7 @@ O site é distribuído em `https://montafolha.com.br` e `https://www.montafolha.
 - Prévia montada e por folha, tamanho final e DPI efetivo.
 - Prévia ampliada das junções verticais e horizontais entre folhas, antes de imprimir.
 - Imagem inteira por padrão, com áreas brancas quando necessário; opção de preencher o pôster com recorte ajustável.
+- Rotação manual da imagem em passos de 90°, sem mudar a orientação do papel.
 - PDF A4 e outros formatos; no modo de preenchimento, a arte alcança as bordas digitais.
 - Aba única de cola à esquerda e acima das novas folhas, para impressora sem bordas.
 - Margens físicas independentes para modo de dobra sem corte, com linhas de dobra e guia opcional.
@@ -41,4 +42,4 @@ O site é distribuído em `https://montafolha.com.br` e `https://www.montafolha.
 
 ## Limites deste MVP
 
-Impressora comum não imprime até a borda física. No modo “Dobrar, sem tesoura”, dobre as margens brancas para trás antes de unir as áreas impressas. O modo de aba única exige impressora sem bordas. Na exportação, as páginas são renderizadas a 150 DPI; a qualidade visível depende da resolução da imagem original. Ainda não há zoom, rotação, recorte livre, templates, ZIP, calibração da impressora ou efeitos avançados da especificação.
+Impressora comum não imprime até a borda física. No modo “Dobrar, sem tesoura”, dobre as margens brancas para trás antes de unir as áreas impressas. O modo de aba única exige impressora sem bordas. Na exportação, as páginas são renderizadas a 150 DPI; a qualidade visível depende da resolução da imagem original. Ainda não há zoom, rotação livre, recorte livre, templates, ZIP, calibração da impressora ou efeitos avançados da especificação.
