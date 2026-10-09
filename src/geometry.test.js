@@ -1,7 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layout, imageCrop, imagePlacement, orientedImageSize, originalImageRegion, pageImageRegion, seamPairs } from './geometry.js';
+import { layout, suggestGrid, imageCrop, imagePlacement, orientedImageSize, originalImageRegion, pageImageRegion, seamPairs } from './geometry.js';
 const base = { paper: 'A4', orientation: 'landscape', cols: 2, rows: 2, mode: 'zero', overlap: 10, left: 5, right: 5, top: 5, bottom: 5 };
+
+test('sugestão usa o tamanho montado real em cada encaixe', () => {
+  const cases = [
+    { mode: 'zero', target: [550, 380], expected: [2, 2, 594, 420] },
+    { mode: 'flap', target: [550, 380], expected: [2, 2, 584, 410] },
+    { mode: 'fold', target: [550, 380], expected: [2, 2, 574, 400] },
+    { mode: 'flap', target: [297, 210], expected: [1, 1, 297, 210] },
+  ];
+  for (const { mode, target, expected } of cases) {
+    const suggestion = suggestGrid({ ...base, mode }, ...target);
+    assert.deepEqual([suggestion.cols, suggestion.rows, suggestion.posterW, suggestion.posterH], expected);
+    assert.deepEqual(suggestion, layout({ ...base, mode, cols: suggestion.cols, rows: suggestion.rows }));
+  }
+});
+
+test('sugestão respeita formato, orientação, margens e limite 6 × 6', () => {
+  const portrait = suggestGrid({ ...base, paper: 'Carta', orientation: 'portrait', mode: 'fold' }, 410, 530);
+  assert.deepEqual([portrait.cols, portrait.rows, portrait.posterW, portrait.posterH], [2, 2, 412, 538]);
+  const custom = { ...base, paper: 'Personalizado', customW: 100, customH: 150, mode: 'zero' };
+  const limit = suggestGrid(custom, 600, 600);
+  assert.deepEqual([limit.cols, limit.rows], [4, 6]);
+  assert.equal(suggestGrid(custom, 901, 600), null);
+});
+
+test('sugestão rejeita metas inválidas sem alterar a configuração', () => {
+  const config = { ...base };
+  for (const target of [[0, 100], [100, -1], [NaN, 100], [Infinity, 100]]) {
+    assert.throws(() => suggestGrid(config, ...target), /maiores que zero/);
+  }
+  assert.deepEqual(config, base);
+  assert.throws(() => suggestGrid({ ...base, paper: 'Personalizado', customW: 40, customH: 60 }, 100, 100), /papel/);
+});
 for (const [mode, expectedW, expectedH] of [['zero', 594, 420], ['flap', 584, 410], ['fold', 574, 400]]) {
   test(`${mode}: as folhas cobrem o pôster sem lacunas`, () => {
     const l = layout({ ...base, mode });

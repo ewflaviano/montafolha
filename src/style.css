@@ -44,3 +44,21 @@
 .rotation-actions button:disabled{opacity:.5;cursor:not-allowed}
 .rotation-control .rotation-state{margin:9px 0 0}
 .rotation-state b{color:#173241}
+
+.size-assistant{margin-top:16px;padding-top:15px;border-top:1px solid #e8ebe7}
+.size-assistant h3{font-size:14px;margin:0 0 5px}
+.size-assistant>p{font-size:12px;line-height:1.45;color:#60747b;margin:0}
+.size-assistant .field-pair{margin-top:11px}
+.size-assistant .field-pair label{font-size:12px;line-height:1.35}
+.size-assistant #size-assistant-hint{margin:9px 0 0}
+#suggest-grid,#apply-grid{width:100%;border:1px solid #2b8173;border-radius:8px;padding:10px;margin-top:12px;background:#eef7f3;color:#1c7166;font-size:13px;font-weight:700}
+#suggest-grid:hover,#apply-grid:hover{background:#e1f1ea}
+#suggest-grid:focus-visible,#apply-grid:focus-visible{outline:3px solid #2f8578;outline-offset:2px}
+#suggest-grid:disabled,#apply-grid:disabled{opacity:.5;cursor:not-allowed}
+.size-assistant .size-suggestion-status{margin:9px 0 0;min-height:0;color:#365f61}
+.size-suggestion-status:empty{display:none}
+.size-suggestion{margin-top:9px;padding:12px;background:#eaf6ef;border:1px solid #b6d9c5;border-radius:9px}
+.size-suggestion strong{font-size:14px;color:#195b4f}
+.size-assistant .size-suggestion p{margin:6px 0 0;color:#3f6263;font-size:12px;line-height:1.45}
+.size-suggestion #apply-grid{margin-top:10px;background:#fff}
+.size-assistant input[aria-invalid="true"]{border-color:#bd553e;box-shadow:0 0 0 2px #bd553e22}
