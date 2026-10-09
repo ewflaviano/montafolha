@@ -31,6 +31,7 @@ O site é distribuído em `https://montafolha.com.br` e `https://www.montafolha.
 
 - Upload ou arraste de PNG, JPEG e WebP; imagem de exemplo para testar.
 - Grade de até 6 × 6 folhas, formatos A5/A4/A3/A2/Carta/Legal e papel personalizado.
+- Sugestão da menor grade a partir de largura e altura mínimas desejadas; mostra o tamanho montado real e a quantidade de folhas antes de aplicar.
 - Prévia montada e por folha, tamanho final e DPI efetivo.
 - Prévia ampliada das junções verticais e horizontais entre folhas, antes de imprimir.
 - Imagem inteira por padrão, com áreas brancas quando necessário; opção de preencher o pôster com recorte ajustável.

@@ -1,5 +1,5 @@
 import { PDFDocument, rgb } from 'pdf-lib';
-import { layout, imagePlacement, orientedImageSize, originalImageRegion, pageImageRegion, seamPairs, PAPERS } from './geometry.js';
+import { layout, imagePlacement, orientedImageSize, originalImageRegion, pageImageRegion, seamPairs, suggestGrid, PAPERS } from './geometry.js';
 import { getChoice, setChoice, pageView, reportError } from './usage.js';
 import './style.css';
 
@@ -14,7 +14,7 @@ app.innerHTML = `
     <aside class="controls">
       <div class="aside-heading"><span class="eyebrow">PROJETO</span><h1>Monte seu pôster</h1><p>Escolha a imagem, o papel e como as folhas se encontram.</p></div>
       <section class="panel"><div class="section-title"><b>01</b><h2>Imagem</h2></div><label class="upload" for="file"><span class="upload-icon">↑</span><strong id="file-name">Clique ou arraste uma imagem</strong><small>PNG, JPEG ou WebP</small></label><input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden/><button id="try-example" class="example-button" type="button">Testar com imagem de exemplo →</button><div id="image-meta" class="micro"></div><div id="rotation-control" class="rotation-control hidden"><strong>Girar imagem</strong><p>Gire a arte sem mudar o papel. Ao girar, o recorte volta ao centro.</p><div class="rotation-actions"><button id="rotate-left" type="button" aria-label="Girar imagem 90 graus para a esquerda">↶ Girar à esquerda</button><button id="rotate-right" type="button" aria-label="Girar imagem 90 graus para a direita">↷ Girar à direita</button></div><p class="rotation-state" role="status">Orientação da imagem: <b id="rotation-angle">0°</b></p></div></section>
-      <section class="panel"><div class="section-title"><b>02</b><h2>Divisão e papel</h2></div><div class="field-pair"><label>Colunas<input data-key="cols" type="number" min="1" max="6"/></label><label>Linhas<input data-key="rows" type="number" min="1" max="6"/></label></div><div class="field-pair"><label>Papel<select data-key="paper">${[...Object.keys(PAPERS), 'Personalizado'].map(x => `<option>${x}</option>`).join('')}</select></label><label>Orientação<select data-key="orientation"><option value="landscape">Paisagem</option><option value="portrait">Retrato</option></select></label></div><div id="custom-paper" class="field-pair"><label>Largura (mm)<input data-key="customW" type="number" min="50" max="1200"/></label><label>Altura (mm)<input data-key="customH" type="number" min="50" max="1200"/></label></div></section>
+      <section class="panel"><div class="section-title"><b>02</b><h2>Divisão e papel</h2></div><div class="field-pair"><label>Colunas<input data-key="cols" type="number" min="1" max="6"/></label><label>Linhas<input data-key="rows" type="number" min="1" max="6"/></label></div><div class="field-pair"><label>Papel<select data-key="paper">${[...Object.keys(PAPERS), 'Personalizado'].map(x => `<option>${x}</option>`).join('')}</select></label><label>Orientação<select data-key="orientation"><option value="landscape">Paisagem</option><option value="portrait">Retrato</option></select></label></div><div id="custom-paper" class="field-pair"><label>Largura (mm)<input data-key="customW" type="number" min="50" max="1200"/></label><label>Altura (mm)<input data-key="customH" type="number" min="50" max="1200"/></label></div><div class="size-assistant"><h3>Escolher pelo tamanho</h3><p>Informe o tamanho mínimo do pôster. Mostraremos a menor grade para este papel e encaixe.</p><div class="field-pair"><label for="target-width">Largura mínima (cm)<input id="target-width" type="number" min="0.1" step="0.1" inputmode="decimal" aria-describedby="size-assistant-hint"/></label><label for="target-height">Altura mínima (cm)<input id="target-height" type="number" min="0.1" step="0.1" inputmode="decimal" aria-describedby="size-assistant-hint"/></label></div><p id="size-assistant-hint" class="micro">O tamanho real pode ser maior. Imprima em 100%.</p><button id="suggest-grid" type="button">Sugerir grade</button><p id="size-suggestion-status" class="size-suggestion-status" role="status" aria-live="polite"></p><div id="size-suggestion" class="size-suggestion hidden"><strong id="size-suggestion-grid"></strong><p id="size-suggestion-measures"></p><button id="apply-grid" type="button">Usar esta grade</button></div></div></section>
       <section class="panel"><div class="section-title"><b>03</b><h2>Encaixe</h2></div><div class="mode-list"><label class="mode"><input type="radio" name="mode" value="zero"/><span><strong>Sem margem no PDF</strong><small>Sem margem extra; áreas brancas do ajuste permanecem.</small></span></label><label class="mode"><input type="radio" name="mode" value="flap"/><span><strong>Aba única por encaixe</strong><small>Uma faixa branca fica sob a folha vizinha. Exige impressora sem bordas.</small></span></label><label class="mode"><input type="radio" name="mode" value="fold"/><span><strong>Dobrar, sem tesoura</strong><small>Para impressora comum. Dobre as faixas brancas para trás.</small></span></label></div><div id="flap-settings" class="subsettings"><label>Aba de cola (mm)<input data-key="overlap" type="number" min="1" max="40"/></label></div><div id="fold-settings" class="subsettings"><span class="micro">Área não imprimível da sua impressora (mm)</span><div class="field-pair"><label>Esquerda<input data-key="left" type="number" min="0" max="40" step="0.5"/></label><label>Direita<input data-key="right" type="number" min="0" max="40" step="0.5"/></label><label>Superior<input data-key="top" type="number" min="0" max="40" step="0.5"/></label><label>Inferior<input data-key="bottom" type="number" min="0" max="40" step="0.5"/></label></div></div><div id="mode-tip" class="tip"></div></section>
       <section class="panel"><label class="check"><input data-key="guide" type="checkbox"/> Incluir guia de montagem no PDF</label></section>
     </aside>
@@ -29,6 +29,49 @@ const fmt = n => `${Math.round(n * 10) / 10}`.replace('.', ',');
 let view = 'mosaic';
 let currentLayout;
 let cropRenderFrame = null;
+let suggestedLayout = null;
+
+function clearGridSuggestion(message = '') {
+  const status = $('#size-suggestion-status');
+  const hadFeedback = !!suggestedLayout || !!status.textContent;
+  suggestedLayout = null;
+  $('#size-suggestion').classList.add('hidden');
+  status.textContent = hadFeedback ? message : '';
+}
+
+function showGridSuggestion() {
+  if (state.busy) return;
+  const width = $('#target-width');
+  const height = $('#target-height');
+  const minW = Number(width.value);
+  const minH = Number(height.value);
+  const validW = width.value !== '' && Number.isFinite(minW) && minW > 0;
+  const validH = height.value !== '' && Number.isFinite(minH) && minH > 0;
+  width.setAttribute('aria-invalid', String(!validW));
+  height.setAttribute('aria-invalid', String(!validH));
+  clearGridSuggestion();
+  if (!validW || !validH) {
+    $('#size-suggestion-status').textContent = 'Informe largura e altura mínimas maiores que zero.';
+    (validW ? height : width).focus();
+    return;
+  }
+  try {
+    const result = suggestGrid(state.config, minW * 10, minH * 10);
+    if (!result) {
+      $('#size-suggestion-status').textContent = 'Este papel e encaixe não atingem o tamanho dentro de 6 × 6 folhas. Tente papel maior ou medidas menores.';
+      return;
+    }
+    suggestedLayout = result;
+    const count = result.pages.length;
+    const message = `${result.cols} × ${result.rows} ${count === 1 ? 'folha' : 'folhas'}; pôster montado de ${fmt(result.posterW / 10)} × ${fmt(result.posterH / 10)} cm.`;
+    $('#size-suggestion-grid').textContent = `${result.cols} × ${result.rows} ${count === 1 ? 'folha' : 'folhas'}`;
+    $('#size-suggestion-measures').textContent = `Tamanho real: ${fmt(result.posterW / 10)} × ${fmt(result.posterH / 10)} cm. A mais que o mínimo: ${fmt((result.posterW - minW * 10) / 10)} × ${fmt((result.posterH - minH * 10) / 10)} cm.`;
+    $('#size-suggestion').classList.remove('hidden');
+    $('#size-suggestion-status').textContent = `Sugestão: ${message}`;
+  } catch (error) {
+    $('#size-suggestion-status').textContent = error.message;
+  }
+}
 
 function placementFor(l, image = state.image, rotation = state.rotation) {
   const size = orientedImageSize(image.naturalWidth, image.naturalHeight, rotation);
@@ -342,6 +385,7 @@ async function addAssemblyGuide(pdf, l, placement = placementFor(l), image = sta
 async function downloadPdf() {
   if (!state.image || !currentLayout || state.busy) return;
   state.busy = true; $('#download').disabled = true; $('#download').textContent = 'Gerando PDF…'; setStatus('Preparando as folhas no seu dispositivo…');
+  $('#suggest-grid').disabled = true; $('#apply-grid').disabled = true;
   $('#crop-position').disabled = true; $('#crop-reset').disabled = true;
   $('#rotate-left').disabled = true; $('#rotate-right').disabled = true;
   app.querySelectorAll('input[name="image-fit"]').forEach(el => { el.disabled = true; });
@@ -373,16 +417,34 @@ async function downloadPdf() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     setStatus(`PDF gerado: ${l.pages.length} ${l.pages.length === 1 ? 'folha' : 'folhas'}${includeGuide ? ' + guia' : ''}.`);
   } catch (e) { console.error(e); reportError('pdf_generation_failed'); setStatus('Falha ao gerar PDF. Tente uma imagem menor ou outra configuração.', true); }
-  finally { state.busy = false; $('#download').textContent = '↓ Gerar PDF'; $('#download').disabled = !state.image || !currentLayout; $('#crop-position').disabled = false; $('#crop-reset').disabled = false; $('#rotate-left').disabled = false; $('#rotate-right').disabled = false; app.querySelectorAll('input[name="image-fit"]').forEach(el => { el.disabled = false; }); }
+  finally { state.busy = false; $('#download').textContent = '↓ Gerar PDF'; $('#download').disabled = !state.image || !currentLayout; $('#suggest-grid').disabled = false; $('#apply-grid').disabled = false; $('#crop-position').disabled = false; $('#crop-reset').disabled = false; $('#rotate-left').disabled = false; $('#rotate-right').disabled = false; app.querySelectorAll('input[name="image-fit"]').forEach(el => { el.disabled = false; }); }
 }
 
 app.addEventListener('change', e => {
   if (e.target.dataset.key) {
     const key = e.target.dataset.key; state.config[key] = e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'number' ? Number(e.target.value) : e.target.value;
+    if (key !== 'guide') clearGridSuggestion('Configuração alterada. Peça uma nova sugestão para estas condições.');
     saveConfig(); render();
   }
-  if (e.target.name === 'mode') { state.config.mode = e.target.value; saveConfig(); render(); }
+  if (e.target.name === 'mode') { state.config.mode = e.target.value; clearGridSuggestion('Encaixe alterado. Peça uma nova sugestão para estas configurações.'); saveConfig(); render(); }
   if (e.target.name === 'image-fit') { state.config.imageFit = e.target.value; saveConfig(); render(); }
+});
+$('#suggest-grid').addEventListener('click', showGridSuggestion);
+for (const field of [$('#target-width'), $('#target-height')]) {
+  field.addEventListener('input', () => {
+    field.removeAttribute('aria-invalid');
+    clearGridSuggestion();
+    $('#size-suggestion-status').textContent = '';
+  });
+  field.addEventListener('keydown', event => { if (event.key === 'Enter') showGridSuggestion(); });
+}
+$('#apply-grid').addEventListener('click', () => {
+  if (!suggestedLayout || state.busy) return;
+  state.config.cols = suggestedLayout.cols;
+  state.config.rows = suggestedLayout.rows;
+  saveConfig();
+  render();
+  $('#size-suggestion-status').textContent = `Grade ${suggestedLayout.cols} × ${suggestedLayout.rows} aplicada. Confira a prévia e o tamanho real no resumo.`;
 });
 $('#file').addEventListener('change', e => loadFile(e.target.files[0]));
 $('#crop-position').addEventListener('input', e => {

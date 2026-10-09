@@ -34,6 +34,26 @@ export function layout(config) {
   return { W, H, cols, rows, posterW, posterH, pages, margins, overlap, mode };
 }
 
+// Procura a menor grade que atinge as duas medidas, usando a mesma geometria do PDF.
+export function suggestGrid(config, minW, minH) {
+  if (![minW, minH].every(value => Number.isFinite(value) && value > 0)) {
+    throw new Error('Informe largura e altura mínimas maiores que zero.');
+  }
+
+  let best = null;
+  for (let cols = 1; cols <= 6; cols++) {
+    for (let rows = 1; rows <= 6; rows++) {
+      const candidate = layout({ ...config, cols, rows });
+      if (candidate.posterW < minW || candidate.posterH < minH) continue;
+      if (!best || candidate.pages.length < best.pages.length ||
+          (candidate.pages.length === best.pages.length && candidate.posterW * candidate.posterH < best.posterW * best.posterH)) {
+        best = candidate;
+      }
+    }
+  }
+  return best;
+}
+
 export function imageCrop(imgW, imgH, posterW, posterH, position = 0.5) {
   const srcRatio = imgW / imgH;
   const dstRatio = posterW / posterH;
